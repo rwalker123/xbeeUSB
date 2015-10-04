@@ -3,19 +3,19 @@ import sys
 import azure
 import socket
  
-from azure.servicebus import (
-  _service_bus_error_handler
-  )
+#from azure.servicebus import (
+#  _service_bus_error_handler
+#  )
  
 from azure.servicebus.servicebusservice import (
   ServiceBusService,
   ServiceBusSASAuthentication
   )
  
-from azure.http import (
-  HTTPRequest,
-  HTTPError
-  )
+#from azure.http import (
+#  HTTPRequest,
+#  HTTPError
+#  )
  
 from azure.http.httpclient import _HTTPClient
  
@@ -24,6 +24,7 @@ class EventHubClient(object):
   def sendMessage(self,body,partition):
     eventHubHost = "rewiotmsg-ns.servicebus.windows.net"
  
+    # change to use requests module
     httpclient = _HTTPClient(service_instance=self)
  
     sasKeyName = "sendPolicy"

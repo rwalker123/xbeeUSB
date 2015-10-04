@@ -1,8 +1,8 @@
 from xbee import XBee
 import serial
-from azureEventHub import *
+#from azureEventHub import *
 import socket
-from proton import *
+#from proton import *
 import uuid
 
 port = serial.Serial("/dev/ttyUSB0", 19200,
