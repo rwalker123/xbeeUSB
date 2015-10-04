@@ -10,7 +10,7 @@ port = serial.Serial("/dev/ttyUSB0", 19200,
                      stopbits=serial.STOPBITS_ONE,
                      bytesize=serial.EIGHTBITS)
 
-print(port.isOpen())
+print('opened port result: ' + str(port.isOpen()))
 
 partition = 1
 
@@ -19,7 +19,7 @@ xbee = XBee(port)
 while True:
     try:
         response = xbee.wait_read_frame()
-        print(response)
+        print('xbee recevied data: ' + response)
 
         mng = Messenger()
         mng.start()
