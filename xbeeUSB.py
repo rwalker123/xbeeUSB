@@ -1,6 +1,6 @@
 from xbee import XBee
 import serial
-#from azureEventHub import *
+import azureEventHub
 import socket
 #from proton import *
 import uuid
@@ -21,6 +21,7 @@ while True:
         response = xbee.wait_read_frame()
         print('xbee recevied data: ' + str(response))
 
+	
 	# azure integration
         #mng = Messenger()
         #mng.start()
@@ -47,7 +48,7 @@ while True:
         #mng.send()
         #mng.stop()
         
-##        hubClient = EventHubClient()
+        hubClient = azureEventHub.EventHubClient()
 ##        parser = EventDataParser()
 ##        hostname = socket.gethostname()
 ##        sensor = 'TestDevice'
