@@ -4,6 +4,20 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <curses.h>
+#include <string>
+#include <queue>
+#include <exception>
+
+class TextException : public std::exception 
+{
+private:
+    std::string errorText;
+
+public:
+    TextException(const char *e) : errorText(e) {}
+    virtual ~TextException() _GLIBCXX_USE_NOEXCEPT {}
+    const char* what() const _GLIBCXX_USE_NOEXCEPT { return errorText.c_str(); }
+};
 
 struct XBeePacket
 {
@@ -27,15 +41,16 @@ struct XBeePacket
 class XBeeSerial
 {
     private:
-        parsePacket();
-        
+        void initVars();     
+  
         unsigned char rx_buffer[256];
         
         XBeePacket currentPacket;
         
         int uart0_filestream;
-        bool gotStartFrame = false;
-        int remainingBytes = -1;
+        bool gotStartFrame;
+        int remainingBytes;
+	int packetBytesRead;
         
         std::queue<XBeePacket> packets;
         
@@ -44,18 +59,25 @@ class XBeeSerial
         ~XBeeSerial();
         void receivePacket();
         bool hasPackets();
+	XBeePacket getPacket();
 };
 
-XBeeSerial::XBeeSerial(const std::string& deviceName)
-: uart0_filestream(-1)
-, gotStartFrame(false)
-, remainingBytes(-1)
+void XBeeSerial::initVars()
 {
+    gotStartFrame = false;
+    remainingBytes = -1;
+    packetBytesRead = 0;
+}
+
+XBeeSerial::XBeeSerial(const std::string& deviceName)
+{
+    initVars();
+
     uart0_filestream = open(deviceName.c_str(), O_RDWR | O_NOCTTY); // | O_NDELAY);
 
     if (uart0_filestream == -1)
     {
-        throw std::exception("Error - Unable to open UART. Ensure it is not in use by another application\n");
+        throw TextException("Error - Unable to open UART. Ensure it is not in use by another application");
     } 
 
     //fcntl(uart0_filestream, F_SETFL, 0); // FNDELAY
@@ -120,7 +142,7 @@ void XBeeSerial::receivePacket()
     int rx_length = read(uart0_filestream, (void*)rx_buffer, 255);
     if (rx_length < 0)
     {
-        throw std::exeception("Error reading from port");
+        throw TextException("Error reading from port");
     }
     else if (rx_length > 0)
     {
@@ -145,7 +167,7 @@ void XBeeSerial::receivePacket()
                 else
                 {
                     currentPacket.dataLen |= rx_buffer[i];
-                    remainingBytes = dataLen + 1;  // +1 for checksum
+                    remainingBytes = currentPacket.dataLen + 1;  // +1 for checksum
                 }
             }
             // byte 4 is the API Identifier
@@ -185,7 +207,7 @@ void XBeeSerial::receivePacket()
                 packetBytesRead++;
                 remainingBytes--;
 
-                currentPacket.xbeeOptions = rx_buffer[i];
+                currentPacket.options = rx_buffer[i];
             }
             // remaining bytes are data
             else if (gotStartFrame)
@@ -196,19 +218,17 @@ void XBeeSerial::receivePacket()
                 if (remainingBytes == 0)
                 {
                     // last byte is checksum
-                    gotStartFrame = false;
-                    remainingBytes = -1;
-                    packetBytesRead = 0;
+                    initVars();
                     packets.push(currentPacket);
                 }			
                 else
                 {
-                    currentPacket.data.append(rx_buffer[i]);
+                    currentPacket.data += rx_buffer[i];
                 }
             }
             else
             {
-                throw std::exception("Unexpected data: %2x\n", (unsigned)rx_buffer[i]);
+                throw TextException("Unexpected data"); //: %2x\n", (unsigned)rx_buffer[i]);
             }
         }
     }
@@ -236,7 +256,7 @@ class XBee
 };
 
 XBee::XBee()
-: serial("/dev/ttyUSB0")
+: serial(std::string("/dev/ttyUSB0"))
 {
 }
 
@@ -254,7 +274,8 @@ int main()
         if (xbee.hasPacket())
         {
             XBeePacket p = xbee.getPacket();
-            printw("Got Packet\n");
+            printw("Got Packet: dataLen: %d, API Id: %x, Source Address: %d, Signal Strength: %d, Options: %d, data: %s\n", 
+		p.dataLen, p.apiId, p.sourceAddress, p.signalStrength, p.options, p.data.c_str());
         }
     }
 
