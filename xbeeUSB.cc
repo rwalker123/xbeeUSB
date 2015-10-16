@@ -8,7 +8,7 @@
 #include <queue>
 #include <exception>
 
-class TextException : public std::exception 
+class TextException : public std::exception
 {
 private:
     std::string errorText;
@@ -27,7 +27,7 @@ struct XBeePacket
     unsigned char signalStrength;
     unsigned char options;
     std::string data;
-    
+
     XBeePacket()
     {
         dataLen = 0;
@@ -41,19 +41,20 @@ struct XBeePacket
 class XBeeSerial
 {
     private:
-        void initVars();     
-  
+        void initVars();
+
         unsigned char rx_buffer[256];
-        
+
         XBeePacket currentPacket;
-        
+
         int uart0_filestream;
         bool gotStartFrame;
         int remainingBytes;
 	int packetBytesRead;
-        
+  	unsigned char chksum;
+
         std::queue<XBeePacket> packets;
-        
+
     public:
         XBeeSerial(const std::string& deviceName);
         ~XBeeSerial();
@@ -67,6 +68,7 @@ void XBeeSerial::initVars()
     gotStartFrame = false;
     remainingBytes = -1;
     packetBytesRead = 0;
+    chksum = 0;
 }
 
 XBeeSerial::XBeeSerial(const std::string& deviceName)
@@ -78,7 +80,7 @@ XBeeSerial::XBeeSerial(const std::string& deviceName)
     if (uart0_filestream == -1)
     {
         throw TextException("Error - Unable to open UART. Ensure it is not in use by another application");
-    } 
+    }
 
     //fcntl(uart0_filestream, F_SETFL, 0); // FNDELAY
 
@@ -104,7 +106,7 @@ XBeeSerial::XBeeSerial(const std::string& deviceName)
     //options.c_lflag |= (ICANON | ECHO | ECHOE);
 
     // enable parity checking and strip parity bit.
-    options.c_iflag |= (INPCK | ISTRIP); 
+    options.c_iflag |= (INPCK | ISTRIP);
 
     // processed output, change newlines into CR-LF
     options.c_oflag |= OPOST;
@@ -117,7 +119,7 @@ XBeeSerial::XBeeSerial(const std::string& deviceName)
     options.c_cc[VMIN] = 0;
     options.c_cc[VTIME] = 0;
 
-    tcsetattr(uart0_filestream, TCSANOW, &options);    
+    tcsetattr(uart0_filestream, TCSANOW, &options);
 }
 
 XBeeSerial::~XBeeSerial()
@@ -134,7 +136,7 @@ XBeePacket XBeeSerial::getPacket()
 {
     XBeePacket p = packets.front();
     packets.pop();
-    
+
     return p;
 }
 void XBeeSerial::receivePacket()
@@ -149,7 +151,7 @@ void XBeeSerial::receivePacket()
         //printw("%i bytes read : ", rx_length);
         for(int i = 0; i < rx_length; ++i)
         {
-            if (!gotStartFrame && rx_buffer[i] == 0x7e) 
+            if (!gotStartFrame && rx_buffer[i] == 0x7e)
             {
                 gotStartFrame = true;
                 packetBytesRead = 1;
@@ -176,6 +178,8 @@ void XBeeSerial::receivePacket()
                 packetBytesRead++;
                 remainingBytes--;
 
+		chksum += rx_buffer[i];
+
                 currentPacket.apiId = rx_buffer[i];
             }
             // bytes 5/6 are source address
@@ -183,6 +187,8 @@ void XBeeSerial::receivePacket()
             {
                 packetBytesRead++;
                 remainingBytes--;
+
+		chksum += rx_buffer[i];
 
                 if (packetBytesRead == 5)
                 {
@@ -193,19 +199,23 @@ void XBeeSerial::receivePacket()
                     currentPacket.sourceAddress |= rx_buffer[i];
                 }
             }
-            // byte 7 is the signal strength
-            else if (gotStartFrame && packetBytesRead < 7)
-            {
-                packetBytesRead++;
-                remainingBytes--;
+	    // byte 7 is signal strength
+	    else if (gotStartFrame && packetBytesRead < 7)
+	    {
+		packetBytesRead++;
+		remainingBytes--;
 
-                currentPacket.signalStrength = rx_buffer[i];
-            }
+		chksum += rx_buffer[i];
+
+		currentPacket.signalStrength = rx_buffer[i];
+	    }
             // byte 8 is the options
             else if (gotStartFrame && packetBytesRead < 8)
             {
                 packetBytesRead++;
                 remainingBytes--;
+
+		chksum += rx_buffer[i];
 
                 currentPacket.options = rx_buffer[i];
             }
@@ -218,29 +228,38 @@ void XBeeSerial::receivePacket()
                 if (remainingBytes == 0)
                 {
                     // last byte is checksum
-                    initVars();
+		    unsigned char recvCheckSum = rx_buffer[i];
+		    chksum += rx_buffer[i];
+              	    initVars();
                     packets.push(currentPacket);
-                }			
+                }
                 else
                 {
-                    currentPacket.data += rx_buffer[i];
+		    if (rx_buffer[i] == 0x7D) // next byte must be XOR'ed with 0x20
+		    {
+			throw TextException("have to handle escaped data");
+		    }
+		    else
+		    {
+                    	currentPacket.data += rx_buffer[i];
+		    }
                 }
             }
             else
             {
-                throw TextException("Unexpected data"); //: %2x\n", (unsigned)rx_buffer[i]);
+                //throw TextException("Unexpected data"); //: %2x\n", (unsigned)rx_buffer[i]);
             }
         }
     }
 }
 
 
-class XBee 
+class XBee
 {
     private:
-    
+
         XBeeSerial serial;
-        
+
     public:
         XBee();
         bool hasPacket()
@@ -248,7 +267,7 @@ class XBee
             serial.receivePacket();
             return serial.hasPackets();
         }
-        
+
         XBeePacket getPacket()
         {
             return serial.getPacket();
@@ -263,7 +282,7 @@ XBee::XBee()
 int main()
 {
     XBee xbee;
-    
+
     // ncurses init.
     initscr();
     timeout(0); // getch timeout
