@@ -1,3 +1,5 @@
+//pi@raspberrypi ~/git/xbeeUSB $ g++ -Wall -I/home/pi/git/azure-iot-sdks/c/iothub_client/inc -I/home/pi/git/azure-iot-sdks/c/common/inc xbeeUSB.cc -L/home/pi/git/azure-iot-sdks/c/iothub_client/build/linux -L/home/pi/git/azure-iot-sdks/c/common/build/linux -L/home/pi/git/azure-iot-sdks/c/serializer/build/linux -lncurses -liothub_client -liothub_amqp_transport -lcommon -lpthread -lqpid-proton -lserializer -o xbeeTest
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,6 +9,7 @@
 #include <string>
 #include <queue>
 #include <exception>
+
 
 class TextException : public std::exception
 {
@@ -283,20 +286,22 @@ XBee::XBee()
 #include <iothubtransportamqp.h>
 #include <iothub_client_ll.h>
 
+DEFINE_ENUM_STRINGS(IOTHUB_CLIENT_CONFIRMATION_RESULT, IOTHUB_CLIENT_CONFIRMATION_RESULT_VALUES);
+
 class AzureIoT
 {
 private:
     IOTHUB_CLIENT_HANDLE iotHubClientHandle;
 
-    static IOTHUBMESSAGE_DISPOSITION_RESULT ReceiveMessageCallback(IOTHUB_MESSAGE_HANDLE message, void* userContextCallback)
-    {
-        const char* buffer;
-        size_t size;
-        IoTHubMessage_GetByteArray(message, (const unsigned char**)&buffer, &size);
-        (void)printf("Received Message with Data: <<<%.*s>>> & Size=%d\r\n", (int)size, buffer, (int)size);
-        /* Some device specific action code goes here... */
-        return IOTHUBMESSAGE_ACCEPTED;
-    }
+    //static IOTHUBMESSAGE_DISPOSITION_RESULT ReceiveMessageCallback(IOTHUB_MESSAGE_HANDLE message, void* userContextCallback)
+    //{
+    //    const char* buffer;
+    //    size_t size;
+    //    IoTHubMessage_GetByteArray(message, (const unsigned char**)&buffer, &size);
+    //    (void)printf("Received Message with Data: <<<%.*s>>> & Size=%d\r\n", (int)size, buffer, (int)size);
+    //    /* Some device specific action code goes here... */
+    //    return IOTHUBMESSAGE_ACCEPTED;
+    //}
     
     static void SendConfirmationCallback(IOTHUB_CLIENT_CONFIRMATION_RESULT result, void* userContextCallback)
     {
@@ -320,7 +325,7 @@ AzureIoT::AzureIoT()
     iotHubClientHandle = IoTHubClient_CreateFromConnectionString(connectionString, AMQP_Protocol);
     
     /* Setting Message call back, so we can receive Commands. */
-    IoTHubClient_SetMessageCallback(iotHubClientHandle, ReceiveMessageCallback, &receiveContext);    
+    //IoTHubClient_SetMessageCallback(iotHubClientHandle, ReceiveMessageCallback, &receiveContext);    
 }
 
 void AzureIoT::sendMessage()
@@ -329,9 +334,9 @@ void AzureIoT::sendMessage()
     char msgText[1024];
     sprintf_s(msgText, sizeof(msgText), "{\"deviceId\":\"MyFirstDevice\",\"data\":%.2f}", rand()%4+2 );
     IOTHUB_MESSAGE_HANDLE messageHandle = IoTHubMessage_CreateFromByteArray((const unsigned char*)msgText, strlen(msgText));
-                        
+
     IoTHubClient_SendEventAsync(iotHubClientHandle, messageHandle, SendConfirmationCallback, (void*)(uintptr_t)messageTrackingId);
-    IoTHubMessage_Destroy(*messageHandle);
+    IoTHubMessage_Destroy(messageHandle);
     messageTrackingId++;
 }
 
