@@ -40,26 +40,26 @@ struct XBeePacket
 
 class XBeeSerial
 {
-    private:
-        void initVars();
+private:
+    void initVars();
 
-        unsigned char rx_buffer[256];
+    unsigned char rx_buffer[256];
 
-        XBeePacket currentPacket;
+    XBeePacket currentPacket;
 
-        int uart0_filestream;
-        bool gotStartFrame;
-        int remainingBytes;
+    int uart0_filestream;
+    bool gotStartFrame;
+    int remainingBytes;
 	int packetBytesRead;
   	unsigned char chksum;
 
-        std::queue<XBeePacket> packets;
+    std::queue<XBeePacket> packets;
 
-    public:
-        XBeeSerial(const std::string& deviceName);
-        ~XBeeSerial();
-        void receivePacket();
-        bool hasPackets();
+public:
+    XBeeSerial(const std::string& deviceName);
+    ~XBeeSerial();
+    void receivePacket();
+    bool hasPackets();
 	XBeePacket getPacket();
 };
 
@@ -178,7 +178,7 @@ void XBeeSerial::receivePacket()
                 packetBytesRead++;
                 remainingBytes--;
 
-		chksum += rx_buffer[i];
+        		chksum += rx_buffer[i];
 
                 currentPacket.apiId = rx_buffer[i];
             }
@@ -188,7 +188,7 @@ void XBeeSerial::receivePacket()
                 packetBytesRead++;
                 remainingBytes--;
 
-		chksum += rx_buffer[i];
+		        chksum += rx_buffer[i];
 
                 if (packetBytesRead == 5)
                 {
@@ -199,23 +199,23 @@ void XBeeSerial::receivePacket()
                     currentPacket.sourceAddress |= rx_buffer[i];
                 }
             }
-	    // byte 7 is signal strength
-	    else if (gotStartFrame && packetBytesRead < 7)
-	    {
-		packetBytesRead++;
-		remainingBytes--;
-
-		chksum += rx_buffer[i];
-
-		currentPacket.signalStrength = rx_buffer[i];
-	    }
+            // byte 7 is signal strength
+            else if (gotStartFrame && packetBytesRead < 7)
+            {
+            packetBytesRead++;
+            remainingBytes--;
+    
+            chksum += rx_buffer[i];
+    
+            currentPacket.signalStrength = rx_buffer[i];
+            }
             // byte 8 is the options
             else if (gotStartFrame && packetBytesRead < 8)
             {
                 packetBytesRead++;
                 remainingBytes--;
 
-		chksum += rx_buffer[i];
+		        chksum += rx_buffer[i];
 
                 currentPacket.options = rx_buffer[i];
             }
@@ -228,21 +228,21 @@ void XBeeSerial::receivePacket()
                 if (remainingBytes == 0)
                 {
                     // last byte is checksum
-		    unsigned char recvCheckSum = rx_buffer[i];
-		    chksum += rx_buffer[i];
+                    unsigned char recvCheckSum = rx_buffer[i];
+                    chksum += rx_buffer[i];
               	    initVars();
                     packets.push(currentPacket);
                 }
                 else
                 {
-		    if (rx_buffer[i] == 0x7D) // next byte must be XOR'ed with 0x20
-		    {
-			throw TextException("have to handle escaped data");
-		    }
-		    else
-		    {
-                    	currentPacket.data += rx_buffer[i];
-		    }
+                    if (rx_buffer[i] == 0x7D) // next byte must be XOR'ed with 0x20
+                    {
+                        throw TextException("have to handle escaped data");
+                    }
+                    else
+                    {
+                        currentPacket.data += rx_buffer[i];
+                    }
                 }
             }
             else
@@ -279,10 +279,73 @@ XBee::XBee()
 {
 }
 
+#include <iothub_client.h>
+#include <iothubtransportamqp.h>
+#include <iothub_client_ll.h>
+
+class AzureIoT
+{
+private:
+    IOTHUB_CLIENT_HANDLE iotHubClientHandle;
+
+    static IOTHUBMESSAGE_DISPOSITION_RESULT ReceiveMessageCallback(IOTHUB_MESSAGE_HANDLE message, void* userContextCallback)
+    {
+        const char* buffer;
+        size_t size;
+        IoTHubMessage_GetByteArray(message, (const unsigned char**)&buffer, &size);
+        (void)printf("Received Message with Data: <<<%.*s>>> & Size=%d\r\n", (int)size, buffer, (int)size);
+        /* Some device specific action code goes here... */
+        return IOTHUBMESSAGE_ACCEPTED;
+    }
+    
+    static void SendConfirmationCallback(IOTHUB_CLIENT_CONFIRMATION_RESULT result, void* userContextCallback)
+    {
+        int messageTrackingId = (intptr_t)userContextCallback;
+        (void)printf("Confirmation received for message tracking id = %d with result = %s\r\n", messageTrackingId, ENUM_TO_STRING(IOTHUB_CLIENT_CONFIRMATION_RESULT, result));
+        /* Some device specific action code goes here... */
+    }
+
+public:
+    AzureIoT();
+    ~AzureIoT();
+
+    void sendMessage();
+};
+
+AzureIoT::AzureIoT()
+{
+    const char* connectionString = "HostName=rewIoTHub.azure-devices.net;DeviceId=MyFirstDevice;SharedAccessKey=BIX0M0v68y0kwnyrUrzN8tR7OtGsMCmlxR7xmG5NeuU=";
+
+    /* Create IoT Hub Client instance */
+    iotHubClientHandle = IoTHubClient_CreateFromConnectionString(connectionString, AMQP_Protocol);
+    
+    /* Setting Message call back, so we can receive Commands. */
+    IoTHubClient_SetMessageCallback(iotHubClientHandle, ReceiveMessageCallback, &receiveContext);    
+}
+
+void AzureIoT::sendMessage()
+{
+    static unsigned int messageTrackingId = 1;
+    char msgText[1024];
+    sprintf_s(msgText, sizeof(msgText), "{\"deviceId\":\"MyFirstDevice\",\"data\":%.2f}", rand()%4+2 );
+    IOTHUB_MESSAGE_HANDLE messageHandle = IoTHubMessage_CreateFromByteArray((const unsigned char*)msgText, strlen(msgText));
+                        
+    IoTHubClient_SendEventAsync(iotHubClientHandle, messageHandle, SendConfirmationCallback, (void*)(uintptr_t)messageTrackingId);
+    IoTHubMessage_Destroy(*messageHandle);
+    messageTrackingId++;
+}
+
+AzureIoT::~AzureIoT()
+{
+    /* When everything is done and the app is closing, clean up resources */
+    IoTHubClient_Destroy(iotHubClientHandle);    
+}
+
 int main()
 {
     XBee xbee;
-
+    AzureIoT azureIoT;
+    
     // ncurses init.
     initscr();
     timeout(0); // getch timeout
@@ -294,7 +357,8 @@ int main()
         {
             XBeePacket p = xbee.getPacket();
             printw("Got Packet: dataLen: %d, API Id: %x, Source Address: %d, Signal Strength: %d, Options: %d, data: %s\n", 
-		p.dataLen, p.apiId, p.sourceAddress, p.signalStrength, p.options, p.data.c_str());
+	               	p.dataLen, p.apiId, p.sourceAddress, p.signalStrength, p.options, p.data.c_str());
+            azureIoT.sendMessage();        
         }
     }
 
